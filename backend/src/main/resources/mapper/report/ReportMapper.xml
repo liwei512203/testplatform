@@ -1,0 +1,265 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.testplatform.report.mapper.ReportMapper">
+
+    <!-- 通用条件：可选项目/团队过滤 + 日期范围 -->
+    <sql id="Daily_Where">
+        <where>
+            <if test="projectId != null and projectId != ''">AND t.project_id = #{projectId}</if>
+            <if test="testTeam != null and testTeam != ''">AND t.test_team = #{testTeam}</if>
+            <if test="startDate != null and startDate != ''">AND t.stat_date &gt;= #{startDate}</if>
+            <if test="endDate != null and endDate != ''">AND t.stat_date &lt;= #{endDate}</if>
+        </where>
+    </sql>
+
+    <select id="sumDaily" resultType="map">
+        SELECT
+        COALESCE(SUM(t.executed_count), 0) AS executed,
+        COALESCE(SUM(t.success_count), 0) AS success,
+        COALESCE(SUM(t.fail_count), 0) AS fail
+        FROM execution_daily_stat t
+        <include refid="Daily_Where"/>
+    </select>
+
+    <select id="countCoveredCases" resultType="long">
+        SELECT COUNT(DISTINCT t.case_id)
+        FROM execution_case_daily_stat t
+        <include refid="Daily_Where"/>
+    </select>
+
+    <select id="countTotalCases" resultType="long">
+        SELECT COUNT(1)
+        FROM test_case tc
+        JOIN project p ON p.id = tc.project_id
+        <where>
+            <if test="projectId != null and projectId != ''">AND tc.project_id = #{projectId}</if>
+            <if test="testTeam != null and testTeam != ''">AND p.test_team = #{testTeam}</if>
+        </where>
+    </select>
+
+    <select id="totalCasesByTeam" resultType="map">
+        SELECT
+        p.test_team AS testTeam,
+        COUNT(1) AS totalCases
+        FROM test_case tc
+        JOIN project p ON p.id = tc.project_id
+        GROUP BY p.test_team
+    </select>
+
+    <select id="totalCasesByProject" resultType="map">
+        SELECT
+        tc.project_id AS projectId,
+        COUNT(1) AS totalCases
+        FROM test_case tc
+        JOIN project p ON p.id = tc.project_id
+        <where>
+            <if test="testTeam != null and testTeam != ''">AND p.test_team = #{testTeam}</if>
+        </where>
+        GROUP BY tc.project_id
+    </select>
+
+    <select id="trendByDay" resultType="map">
+        SELECT
+        t.stat_date AS date,
+        COALESCE(SUM(t.executed_count), 0) AS executed,
+        COALESCE(SUM(t.success_count), 0) AS success,
+        COALESCE(SUM(t.fail_count), 0) AS fail
+        FROM execution_daily_stat t
+        <include refid="Daily_Where"/>
+        GROUP BY t.stat_date
+        ORDER BY t.stat_date
+    </select>
+
+    <select id="trendByWeek" resultType="map">
+        SELECT
+        DATE_SUB(t.stat_date, INTERVAL WEEKDAY(t.stat_date) DAY) AS date,
+        COALESCE(SUM(t.executed_count), 0) AS executed,
+        COALESCE(SUM(t.success_count), 0) AS success,
+        COALESCE(SUM(t.fail_count), 0) AS fail
+        FROM execution_daily_stat t
+        <include refid="Daily_Where"/>
+        GROUP BY DATE_SUB(t.stat_date, INTERVAL WEEKDAY(t.stat_date) DAY)
+        ORDER BY date
+    </select>
+
+    <!-- 团队聚合：当前区间 + 上一区间对照（条件聚合，一次查询） -->
+    <select id="sumByTeam" resultType="map">
+        SELECT
+        t.test_team AS testTeam,
+        COALESCE(SUM(CASE WHEN t.stat_date BETWEEN #{startDate} AND #{endDate}
+                     THEN t.executed_count ELSE 0 END), 0) AS executed,
+        COALESCE(SUM(CASE WHEN t.stat_date BETWEEN #{startDate} AND #{endDate}
+                     THEN t.success_count ELSE 0 END), 0) AS success,
+        COALESCE(SUM(CASE WHEN t.stat_date BETWEEN #{startDate} AND #{endDate}
+                     THEN t.fail_count ELSE 0 END), 0) AS fail,
+        SUM(CASE WHEN t.stat_date BETWEEN #{startDate} AND #{endDate}
+                 THEN t.executed_count ELSE NULL END) AS executedNonNull,
+        SUM(CASE WHEN t.stat_date BETWEEN #{prevStartDate} AND #{prevEndDate}
+                 THEN t.executed_count ELSE NULL END) AS prevExecuted
+        FROM execution_daily_stat t
+        WHERE t.stat_date BETWEEN #{prevStartDate} AND #{endDate}
+        GROUP BY t.test_team
+        ORDER BY executed DESC
+    </select>
+
+    <select id="coveredByTeam" resultType="map">
+        SELECT
+        t.test_team AS testTeam,
+        COUNT(DISTINCT t.case_id) AS covered
+        FROM execution_case_daily_stat t
+        WHERE t.stat_date BETWEEN #{startDate} AND #{endDate}
+        GROUP BY t.test_team
+    </select>
+
+    <!-- 项目行（团队下钻）：项目表为主表 outer join 统计，含上一区间对照 -->
+    <select id="projectRows" resultType="map">
+        SELECT
+        p.id AS projectId,
+        p.name AS projectName,
+        p.system_code AS systemCode,
+        p.test_team AS testTeam,
+        COALESCE(cur.executed, 0) AS executed,
+        COALESCE(cur.success, 0) AS success,
+        COALESCE(cur.fail, 0) AS fail,
+        cur.executed AS executedNonNull,
+        prev.executed AS prevExecuted
+        FROM project p
+        LEFT JOIN (
+            SELECT project_id,
+                   SUM(executed_count) AS executed,
+                   SUM(success_count) AS success,
+                   SUM(fail_count) AS fail
+            FROM execution_daily_stat
+            WHERE stat_date BETWEEN #{startDate} AND #{endDate}
+            GROUP BY project_id
+        ) cur ON cur.project_id = p.id
+        LEFT JOIN (
+            SELECT project_id, SUM(executed_count) AS executed
+            FROM execution_daily_stat
+            WHERE stat_date BETWEEN #{prevStartDate} AND #{prevEndDate}
+            GROUP BY project_id
+        ) prev ON prev.project_id = p.id
+        <where>
+            <if test="testTeam != null and testTeam != ''">AND p.test_team = #{testTeam}</if>
+        </where>
+        ORDER BY executed DESC, p.system_code
+    </select>
+
+    <select id="coveredByProject" resultType="map">
+        SELECT
+        t.project_id AS projectId,
+        COUNT(DISTINCT t.case_id) AS covered
+        FROM execution_case_daily_stat t
+        WHERE t.stat_date BETWEEN #{startDate} AND #{endDate}
+        <if test="testTeam != null and testTeam != ''">
+            AND t.project_id IN (SELECT id FROM project WHERE test_team = #{testTeam})
+        </if>
+        GROUP BY t.project_id
+    </select>
+
+    <!-- 用例明细：orderClause 由 Service 从白名单映射，非用户输入拼接 -->
+    <select id="caseRows" resultType="map">
+        SELECT
+        s.case_id AS caseId,
+        tc.name AS caseName,
+        COALESCE(SUM(s.executed_count), 0) AS executed,
+        COALESCE(SUM(s.success_count), 0) AS success,
+        COALESCE(SUM(s.fail_count), 0) AS fail,
+        MIN(s.stat_date) AS firstDate,
+        MAX(s.stat_date) AS lastDate
+        FROM execution_case_daily_stat s
+        LEFT JOIN test_case tc ON tc.id = s.case_id
+        WHERE s.project_id = #{projectId}
+          AND s.stat_date BETWEEN #{startDate} AND #{endDate}
+          <if test="keyword != null and keyword != ''">
+              AND tc.name LIKE CONCAT('%', #{keyword}, '%')
+          </if>
+        GROUP BY s.case_id, tc.name
+        ORDER BY ${orderClause}
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countCaseRows" resultType="long">
+        SELECT COUNT(*)
+        FROM (
+            SELECT s.case_id
+            FROM execution_case_daily_stat s
+            LEFT JOIN test_case tc ON tc.id = s.case_id
+            WHERE s.project_id = #{projectId}
+              AND s.stat_date BETWEEN #{startDate} AND #{endDate}
+              <if test="keyword != null and keyword != ''">
+                  AND tc.name LIKE CONCAT('%', #{keyword}, '%')
+              </if>
+            GROUP BY s.case_id
+        ) t
+    </select>
+
+    <select id="topFailures" resultType="map">
+        SELECT
+        s.case_id AS caseId,
+        tc.name AS caseName,
+        COALESCE(SUM(s.executed_count), 0) AS executed,
+        COALESCE(SUM(s.success_count), 0) AS success,
+        COALESCE(SUM(s.fail_count), 0) AS fail
+        FROM execution_case_daily_stat s
+        LEFT JOIN test_case tc ON tc.id = s.case_id
+        WHERE s.project_id = #{projectId}
+          AND s.stat_date BETWEEN #{startDate} AND #{endDate}
+        GROUP BY s.case_id, tc.name
+        ORDER BY fail DESC, executed DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="sumByExecType" resultType="map">
+        SELECT
+        t.exec_type AS execType,
+        COALESCE(SUM(t.executed_count), 0) AS executed,
+        COALESCE(SUM(t.success_count), 0) AS success,
+        COALESCE(SUM(t.fail_count), 0) AS fail
+        FROM execution_daily_stat t
+        <include refid="Daily_Where"/>
+        GROUP BY t.exec_type
+        ORDER BY executed DESC
+    </select>
+
+    <select id="sumByTeamAndType" resultType="map">
+        SELECT
+        t.test_team AS testTeam,
+        t.exec_type AS execType,
+        COALESCE(SUM(t.executed_count), 0) AS executed,
+        COALESCE(SUM(t.success_count), 0) AS success,
+        COALESCE(SUM(t.fail_count), 0) AS fail
+        FROM execution_daily_stat t
+        WHERE t.stat_date BETWEEN #{startDate} AND #{endDate}
+        GROUP BY t.test_team, t.exec_type
+    </select>
+
+    <select id="sumByProjectAndType" resultType="map">
+        SELECT
+        t.project_id AS projectId,
+        t.exec_type AS execType,
+        COALESCE(SUM(t.executed_count), 0) AS executed,
+        COALESCE(SUM(t.success_count), 0) AS success,
+        COALESCE(SUM(t.fail_count), 0) AS fail
+        FROM execution_daily_stat t
+        WHERE t.stat_date BETWEEN #{startDate} AND #{endDate}
+        <if test="testTeam != null and testTeam != ''">
+            AND t.test_team = #{testTeam}
+        </if>
+        GROUP BY t.project_id, t.exec_type
+    </select>
+
+    <select id="sumCaseByProjectAndType" resultType="map">
+        SELECT
+        s.case_id AS caseId,
+        s.exec_type AS execType,
+        COALESCE(SUM(s.executed_count), 0) AS executed,
+        COALESCE(SUM(s.success_count), 0) AS success,
+        COALESCE(SUM(s.fail_count), 0) AS fail
+        FROM execution_case_daily_stat s
+        WHERE s.project_id = #{projectId}
+          AND s.stat_date BETWEEN #{startDate} AND #{endDate}
+        GROUP BY s.case_id, s.exec_type
+    </select>
+
+</mapper>

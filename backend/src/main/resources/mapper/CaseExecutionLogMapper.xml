@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.testplatform.mapper.CaseExecutionLogMapper">
+
+    <insert id="insertByPlanId">
+        INSERT INTO case_execution_log (plan_id, project_id, case_id, result, exec_type, execute_time, exec_date)
+        SELECT pc.plan_id, vp.project_id, pc.case_id, pc.result, #{execType}, #{executeTime}, #{execDate}
+        FROM plan_case pc
+        JOIN version_plan vp ON vp.id = pc.plan_id
+        WHERE pc.plan_id = #{planId}
+          AND pc.result IN ('成功', '失败')
+    </insert>
+
+    <update id="updateTimeByPlanId">
+        UPDATE case_execution_log
+        SET execute_time = #{executeTime},
+            exec_date = #{execDate}
+        WHERE plan_id = #{planId}
+    </update>
+
+    <delete id="deleteByPlanId">
+        DELETE FROM case_execution_log WHERE plan_id = #{planId}
+    </delete>
+
+    <delete id="deleteByProjectId">
+        DELETE FROM case_execution_log WHERE project_id = #{projectId}
+    </delete>
+
+    <delete id="deleteByCaseId">
+        DELETE FROM case_execution_log WHERE case_id = #{caseId}
+    </delete>
+
+</mapper>

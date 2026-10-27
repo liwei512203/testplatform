@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.testplatform.mapper.PlanCaseMapper">
+
+    <insert id="insertSnapshot">
+        INSERT INTO plan_case (plan_id, case_id, result, exec_type, plan_date)
+        SELECT #{planId}, id, '未执行', '手动执行', #{planDate}
+        FROM test_case
+        WHERE project_id = #{projectId}
+    </insert>
+
+    <select id="selectPageByPlanId" resultType="PlanCaseVO">
+        SELECT
+        pc.id, pc.plan_id, pc.case_id, pc.result, pc.exec_type, pc.execute_time, pc.plan_date,
+        tc.name AS case_name, tc.content
+        FROM plan_case pc
+        LEFT JOIN test_case tc ON tc.id = pc.case_id
+        WHERE pc.plan_id = #{planId}
+        ORDER BY pc.case_id ASC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countByPlanId" resultType="long">
+        SELECT COUNT(1) FROM plan_case WHERE plan_id = #{planId}
+    </select>
+
+    <select id="countByPlanIdAndResult" resultType="long">
+        SELECT COUNT(1)
+        FROM plan_case
+        WHERE plan_id = #{planId} AND result = #{result}
+    </select>
+
+    <update id="executeByPlanId">
+        UPDATE plan_case
+        SET result = CASE WHEN RAND() &lt; 0.8 THEN '成功' ELSE '失败' END,
+            exec_type = #{execType},
+            execute_time = #{executeTime}
+        WHERE plan_id = #{planId}
+    </update>
+
+    <update id="updateExecuteTimeByPlanId">
+        UPDATE plan_case
+        SET execute_time = #{executeTime}
+        WHERE plan_id = #{planId} AND result IN ('成功', '失败')
+    </update>
+
+    <update id="updatePlanDateByPlanId">
+        UPDATE plan_case
+        SET plan_date = #{planDate}
+        WHERE plan_id = #{planId}
+    </update>
+
+    <delete id="deleteByProjectId">
+        DELETE pc
+        FROM plan_case pc
+        JOIN version_plan vp ON vp.id = pc.plan_id
+        WHERE vp.project_id = #{projectId}
+    </delete>
+
+    <delete id="deleteByPlanId">
+        DELETE FROM plan_case WHERE plan_id = #{planId}
+    </delete>
+
+</mapper>

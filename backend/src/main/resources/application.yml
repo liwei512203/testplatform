@@ -1,0 +1,64 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: test-platform
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/test_platform?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: cib@1234
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+    locations: classpath:db/migration
+    encoding: UTF-8
+    table: flyway_schema_history
+  jackson:
+    default-property-inclusion: non_null
+
+mybatis:
+  mapper-locations: classpath*:mapper/**/*.xml
+  type-aliases-package: com.example.testplatform.entity,com.example.testplatform.vo,com.example.testplatform.report.vo
+  configuration:
+    map-underscore-to-camel-case: true
+
+# OpenAPI3(Swagger) 接口文档
+springdoc:
+  api-docs:
+    # OpenAPI 描述文件地址：/v3/api-docs
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    # 原生 Swagger UI：/swagger-ui/index.html
+    enabled: true
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  # 默认扫描 @RestController 注解的类
+  packages-to-scan: com.example.testplatform
+
+# Knife4j 增强文档（http://localhost:8082/doc.html）
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+
+logging:
+  level:
+    com.example.testplatform: debug
+
+# 报表数据保留与分区维护策略
+report:
+  # 用例日统计表（聚合数据）保留月数
+  stat-retention-months: 36
+  # 计划用例明细表保留月数（明细过期清理后，统计表仍保留汇总）
+  plan-retention-months: 12
+  # 滚动预建未来分区月数
+  partition-precreate-months: 3
+  # 统计跑批：每天凌晨从执行日志重算最近 N 天的日统计表
+  stat-batch:
+    cron: "0 0 1 * * ?"
+    window-days: 2

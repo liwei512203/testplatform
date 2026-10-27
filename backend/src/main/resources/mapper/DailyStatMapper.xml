@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.testplatform.mapper.DailyStatMapper">
+
+    <delete id="deleteByProjectAndDate">
+        DELETE FROM execution_daily_stat
+        WHERE project_id = #{projectId} AND stat_date = #{statDate}
+    </delete>
+
+    <insert id="insertAggregateByDate">
+        INSERT INTO execution_daily_stat
+            (stat_date, project_id, test_team, exec_type, executed_count, success_count, fail_count)
+        SELECT
+            #{statDate},
+            l.project_id,
+            MAX(p.test_team),
+            l.exec_type,
+            COUNT(*),
+            SUM(l.result = '成功'),
+            SUM(l.result = '失败')
+        FROM case_execution_log l
+        JOIN project p ON p.id = l.project_id
+        WHERE l.project_id = #{projectId}
+          AND l.exec_date = #{statDate}
+        GROUP BY l.project_id, l.exec_type
+    </insert>
+
+    <update id="updateTeamByProject">
+        UPDATE execution_daily_stat
+        SET test_team = #{testTeam}
+        WHERE project_id = #{projectId}
+    </update>
+
+    <delete id="deleteByProject">
+        DELETE FROM execution_daily_stat
+        WHERE project_id = #{projectId}
+    </delete>
+
+    <update id="updateCaseTeamByProject">
+        UPDATE execution_case_daily_stat
+        SET test_team = #{testTeam}
+        WHERE project_id = #{projectId}
+    </update>
+
+    <delete id="deleteCaseByProjectAndDate">
+        DELETE FROM execution_case_daily_stat
+        WHERE project_id = #{projectId} AND stat_date = #{statDate}
+    </delete>
+
+    <insert id="insertCaseAggregateByDate">
+        INSERT INTO execution_case_daily_stat
+            (stat_date, project_id, case_id, test_team, exec_type, executed_count, success_count, fail_count)
+        SELECT
+            #{statDate},
+            l.project_id,
+            l.case_id,
+            MAX(p.test_team),
+            l.exec_type,
+            COUNT(*),
+            SUM(l.result = '成功'),
+            SUM(l.result = '失败')
+        FROM case_execution_log l
+        JOIN project p ON p.id = l.project_id
+        WHERE l.project_id = #{projectId}
+          AND l.exec_date = #{statDate}
+        GROUP BY l.case_id, l.exec_type
+    </insert>
+
+    <delete id="deleteCaseByProject">
+        DELETE FROM execution_case_daily_stat
+        WHERE project_id = #{projectId}
+    </delete>
+
+    <delete id="deleteCaseStatByCaseId">
+        DELETE FROM execution_case_daily_stat
+        WHERE case_id = #{caseId}
+    </delete>
+
+    <!-- ===== 跑批：按日期全量重算（项目维度） ===== -->
+    <delete id="deleteStatByDate">
+        DELETE FROM execution_daily_stat
+        WHERE stat_date = #{statDate}
+    </delete>
+
+    <delete id="deleteCaseStatByDate">
+        DELETE FROM execution_case_daily_stat
+        WHERE stat_date = #{statDate}
+    </delete>
+
+    <insert id="insertStatByDate">
+        INSERT INTO execution_daily_stat
+            (stat_date, project_id, test_team, exec_type, executed_count, success_count, fail_count)
+        SELECT
+            l.exec_date,
+            l.project_id,
+            MAX(p.test_team),
+            l.exec_type,
+            COUNT(*),
+            SUM(l.result = '成功'),
+            SUM(l.result = '失败')
+        FROM case_execution_log l
+        JOIN project p ON p.id = l.project_id
+        WHERE l.exec_date = #{statDate}
+        GROUP BY l.project_id, l.exec_type
+    </insert>
+
+    <insert id="insertCaseStatByDate">
+        INSERT INTO execution_case_daily_stat
+            (stat_date, project_id, case_id, test_team, exec_type, executed_count, success_count, fail_count)
+        SELECT
+            l.exec_date,
+            l.project_id,
+            l.case_id,
+            MAX(p.test_team),
+            l.exec_type,
+            COUNT(*),
+            SUM(l.result = '成功'),
+            SUM(l.result = '失败')
+        FROM case_execution_log l
+        JOIN project p ON p.id = l.project_id
+        WHERE l.exec_date = #{statDate}
+        GROUP BY l.project_id, l.case_id, l.exec_type
+    </insert>
+
+    <select id="selectExecDateRange" resultType="map">
+        SELECT MIN(exec_date) AS minDate, MAX(exec_date) AS maxDate
+        FROM case_execution_log
+    </select>
+
+</mapper>

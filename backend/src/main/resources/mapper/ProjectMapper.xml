@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.testplatform.mapper.ProjectMapper">
+
+    <sql id="Base_Column_List">
+        id, name, system_code, test_team
+    </sql>
+
+    <select id="selectAll" resultType="Project">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM project
+        <where>
+            <if test="keyword != null and keyword != ''">
+                AND (name LIKE CONCAT('%', #{keyword}, '%')
+                OR system_code LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+            <if test="testTeam != null and testTeam != ''">
+                AND test_team = #{testTeam}
+            </if>
+        </where>
+        ORDER BY system_code ASC
+    </select>
+
+    <select id="selectById" resultType="Project">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM project
+        WHERE id = #{id}
+    </select>
+
+    <insert id="insert" parameterType="Project">
+        INSERT INTO project (id, name, system_code, test_team)
+        VALUES (#{id}, #{name}, #{systemCode}, #{testTeam})
+    </insert>
+
+    <update id="update" parameterType="Project">
+        UPDATE project
+        <set>
+            <if test="name != null and name != ''">name = #{name},</if>
+            <if test="systemCode != null and systemCode != ''">system_code = #{systemCode},</if>
+            <if test="testTeam != null and testTeam != ''">test_team = #{testTeam},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM project WHERE id = #{id}
+    </delete>
+
+</mapper>
